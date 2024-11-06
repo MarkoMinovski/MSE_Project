@@ -1,12 +1,13 @@
 import requests
 from bs4 import BeautifulSoup
 
-resp = requests.get("https://www.example.com/")
+s = 'mississipi'
+old = 'iss'
+new = 'XXX'
+maxreplace = 1
 
-soup = BeautifulSoup(resp.content, 'html.parser')
+intermediary = s.rsplit(old, maxreplace)
 
-div = soup.find_all('div')[0]
+result = new.join(intermediary)
 
-second_p = div.find_all('p')[1]
-
-print(second_p)
+print(result)
