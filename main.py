@@ -1,15 +1,10 @@
 import sys
 
-from pymongo import MongoClient
-from pymongo.server_api import ServerApi
 from datetime import datetime, timedelta
-from scraper import TickerScraper
+from TickerScraper import TickerScraper
+from DBClient import database as db
 
-TEN_YEARS_PRIOR = datetime(2024, 11, 2) - timedelta(days=365 * 10)
-
-uri = "mongodb+srv://marko_m:HhfpCcGObwf7Huxn@maincluster.zwq2b.mongodb.net/?retryWrites=true&w=majority&appName=MainCluster"
-
-client = MongoClient(uri, server_api=ServerApi('1'))
+TEN_YEARS_PRIOR = datetime.today() - timedelta(days=(365 * 10) - 1)
 
 if __name__ == '__main__':
     initial_url = "https://www.mse.mk/mk/stats/symbolhistory/MPT"
@@ -24,9 +19,8 @@ if __name__ == '__main__':
         sys.exit(1)
 
     # Our MongoDB database is literally called database
-    database = client["database"]
 
-    existing_tickers = database.list_collection_names()
+    existing_tickers = db.list_collection_names()
     ticker_name_last_date_pairs = []
     # list of tuples, with ticker name and last available date as the two elements
 
@@ -34,7 +28,7 @@ if __name__ == '__main__':
     for ticker in tickers_filtered:
         # We have a collection in our database that holds information about each ticker and the latest date for
         # which we have scraped data
-        ticker_info_collection = database["tickers"]
+        ticker_info_collection = db["tickers"]
 
         if ticker not in existing_tickers:
 
@@ -53,3 +47,5 @@ if __name__ == '__main__':
             tmp_tuple = (name_last_date_pair["ticker"], name_last_date_pair["last_date_info"])
 
             ticker_name_last_date_pairs.append(tmp_tuple)
+
+    # TODO: TRANSFORM ABOVE CODE TO BE MORE MODULAR, AND EXPAND IT

@@ -7,14 +7,5 @@ client = MongoClient(uri, server_api=ServerApi('1'))
 
 database = client["database"]
 
-doc = {
-    "Field1": "Testing1",
-    "Field2": "Testing2"
-}
 
-collection = database["test-write"]
-
-res_write = collection.insert_one(doc)
-
-print(res_write)
 

@@ -10,7 +10,7 @@ def filter_result(all_tickers_set):
 
     for ticker in all_tickers_set:
         if any(character.isdigit() for character in ticker):
-            pass
+            continue
         else:
             tickers_filtered.append(ticker)
 
