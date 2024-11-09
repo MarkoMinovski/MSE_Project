@@ -1,13 +1,9 @@
-import requests
-from bs4 import BeautifulSoup
+from Tablescraper import is_less_than_year_ago
+from datetime import datetime, timedelta, time
 
-s = 'mississipi'
-old = 'iss'
-new = 'XXX'
-maxreplace = 1
+date = datetime(2024, 7, 12)
 
-intermediary = s.rsplit(old, maxreplace)
-
-result = new.join(intermediary)
-
-print(result)
+if is_less_than_year_ago(date) is True:
+    print("Date is less than a year ago")
+else:
+    print("Error in func")

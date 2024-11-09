@@ -11,9 +11,9 @@ TODAY = datetime.today()
 def is_less_than_year_ago(date):
     one_year_ago = TODAY - timedelta(days=364)
     if date < one_year_ago:
-        return True
-    else:
         return False
+    else:
+        return True
 
 
 def reformat_delimiters(table_row_object):
@@ -26,7 +26,7 @@ def reformat_delimiters(table_row_object):
     return tmp
 
 
-def reformat_price_delimiter(price_string):
+def reformat_price_delimiter(price_string: str):
     tmp_price_str = price_string
     tmp_price_str = tmp_price_str.replace(".", ",")
     split = tmp_price_str.rsplit(",", 1)
@@ -40,10 +40,10 @@ def get_day_month_year(date: str):
 
 
 # Abstract class. Methods only, no fields needed
-class TableScraper:
+class Tablescraper:
     @staticmethod
-    def ScrapeTable(ticker_code: str, latest_date):
-        response = TableScraper.send_post_request(ticker_code, latest_date)
+    def scrape_table(ticker_code: str, latest_date):
+        response = Tablescraper.send_post_request(ticker_code, latest_date)
         soup = BeautifulSoup(response.content, "html.parser")
 
         table_rows = soup.find_all('tr')
@@ -53,7 +53,11 @@ class TableScraper:
         # HTML structure of stock exchange page:
         # each <tr> has exactly 9 child <td> tags
         for row in table_rows:
-            children = row.find_all('td')
+            children = row.find_all("td", recursive=False)
+
+            # issue with reading first row of the table as it has no <td> tags
+            if len(children) != 9:
+                continue
 
             table_row_obj = TableRow()
 
@@ -67,7 +71,7 @@ class TableScraper:
             table_row_obj.BEST_turnover_in_denars = children[7].text
             table_row_obj.total_turnover_in_denars = children[8].text
 
-            table_row_obj = reformat_price_delimiter(table_row_obj)
+            table_row_obj = reformat_delimiters(table_row_obj)
 
             d_m_y = get_day_month_year(table_row_obj.date)
             datetime_d_m_y = datetime(int(d_m_y[2]), int(d_m_y[1]), int(d_m_y[0]))
