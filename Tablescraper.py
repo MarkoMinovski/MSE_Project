@@ -1,3 +1,4 @@
+import csv
 from DBClient import database as db
 import requests
 from bs4 import BeautifulSoup
@@ -44,10 +45,11 @@ def get_day_month_year(date: str):
 # Abstract class. Methods only, no fields needed
 class Tablescraper:
     @staticmethod
-    def scrape_table(ticker_code: str, latest_date):
+    def scrape_table(ticker_code: str, latest_date, write_locally, file, writer):
         finished_batch = False
         no_table_in_previous_cycle = False
         search_date = latest_date
+        date_return_value = latest_date
 
         while not finished_batch:
 
@@ -66,6 +68,7 @@ class Tablescraper:
                 continue
 
             print("Table rows in HTML found")
+
             table_ticker_collection = db[ticker_code]
 
             # HTML structure of stock exchange page:
@@ -89,27 +92,48 @@ class Tablescraper:
                 table_row_obj.BEST_turnover_in_denars = children[7].text
                 table_row_obj.total_turnover_in_denars = children[8].text
 
-                table_row_obj = reformat_delimiters(table_row_obj)
-
                 d_m_y = get_day_month_year(table_row_obj.date)
                 datetime_d_m_y = datetime(int(d_m_y[2]), int(d_m_y[0]), int(d_m_y[1]))
 
-                row_doc = {
-                    "date": datetime_d_m_y,
-                    "date_str": table_row_obj.date,
-                    "last_trade_price": table_row_obj.last_trade_price,
-                    "max": table_row_obj.max,
-                    "min": table_row_obj.min,
-                    "avg": table_row_obj.avg,
-                    "percentage_change_decimal": table_row_obj.percentage_change_as_decimal,
-                    "vol": table_row_obj.volume,
-                    "BEST_turnover": table_row_obj.BEST_turnover_in_denars,
-                    "total_turnover": table_row_obj.total_turnover_in_denars
-                }
+                if write_locally is False:
+                    table_row_obj = reformat_delimiters(table_row_obj)
 
-                table_ticker_collection.insert_one(row_doc)
-            print("Writing to Db complete")
-            finished_batch = True
+                    row_doc = {
+                        "date": datetime_d_m_y,
+                        "date_str": table_row_obj.date,
+                        "last_trade_price": table_row_obj.last_trade_price,
+                        "max": table_row_obj.max,
+                        "min": table_row_obj.min,
+                        "avg": table_row_obj.avg,
+                        "percentage_change_decimal": table_row_obj.percentage_change_as_decimal,
+                        "vol": table_row_obj.volume,
+                        "BEST_turnover": table_row_obj.BEST_turnover_in_denars,
+                        "total_turnover": table_row_obj.total_turnover_in_denars
+                    }
+
+                    table_ticker_collection.insert_one(row_doc)
+                else:
+                    row_csv_raw = {
+                        "code": ticker_code,
+                        "date": table_row_obj.date,
+                        "last_trade_price": table_row_obj.last_trade_price,
+                        "max": table_row_obj.max,
+                        "min": table_row_obj.min,
+                        "avg": table_row_obj.avg,
+                        "percentage_change": table_row_obj.percentage_change_as_decimal,
+                        "volume": table_row_obj.volume,
+                        "best_turnover": table_row_obj.BEST_turnover_in_denars,
+                        "total_turnover": table_row_obj.total_turnover_in_denars
+                    }
+
+                    writer.writerow(row_csv_raw)
+                    if datetime_d_m_y > date_return_value:
+                        date_return_value = datetime_d_m_y
+                finished_batch = True
+
+        print("Writing complete")
+
+        return date_return_value
 
     @staticmethod
     def send_post_request(ticker_code, latest_date):

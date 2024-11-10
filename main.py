@@ -1,3 +1,4 @@
+import csv
 import sys
 
 from datetime import datetime, timedelta
@@ -12,6 +13,16 @@ START = time.time()
 END = None
 
 if __name__ == '__main__':
+    user_input = input("Write raw output to CSV file? [Y/N] (This will skip writing to the Database) ")
+
+    if user_input == "Y" or user_input == "y":
+        local_write = True
+    elif user_input == "N" or user_input == "n":
+        local_write = False
+    else:
+        print("Unrecognized input. Defaulting to Database write")
+        local_write = False
+
     initial_url = "https://www.mse.mk/en/stats/symbolhistory/MPT"
     latest_available_date = Latestdatescraper.get_latest_available_date()
     raw_tickers_scraper = TickerScraper(initial_url)
@@ -37,21 +48,25 @@ if __name__ == '__main__':
 
     # Second part of the pipeline
     for ticker in tickers_filtered:
-        query_result = ticker_info_collection.find_one({"ticker": ticker})
 
-        if query_result is None:
+        if local_write is False:
+            query_result = ticker_info_collection.find_one({"ticker": ticker})
 
-            new_doc = {
-                "ticker": ticker,
-                "last_date_info": TEN_YEARS_PRIOR
-            }
+            if query_result is None:
 
-            ticker_info_collection.insert_one(new_doc)
-            ticker_name_last_date_pairs.append((ticker, TEN_YEARS_PRIOR))
+                new_doc = {
+                    "ticker": ticker,
+                    "last_date_info": TEN_YEARS_PRIOR
+                }
 
+                ticker_info_collection.insert_one(new_doc)
+                ticker_name_last_date_pairs.append((ticker, TEN_YEARS_PRIOR))
+
+            else:
+                tmp_tuple = (query_result["ticker"], query_result["last_date_info"])
+                ticker_name_last_date_pairs.append(tmp_tuple)
         else:
-            tmp_tuple = (query_result["ticker"], query_result["last_date_info"])
-            ticker_name_last_date_pairs.append(tmp_tuple)
+            ticker_name_last_date_pairs.append((ticker, TEN_YEARS_PRIOR))
 
     # TODO: TRANSFORM ABOVE CODE TO BE MORE MODULAR, AND EXPAND IT
 
@@ -73,13 +88,12 @@ if __name__ == '__main__':
         else:
             is_up_to_date.append(True)
 
-    # PyCharm says to simplify this expression, but this reads more clearly
-
-    # Basically continuously call the Tablescraper module while any remaining ticker value is NOT up-to-date
-
-    # For now though, let's just test the module first
-
     print("Entering main LOOP")
+
+    file = open("raw_output_labeled.csv", mode="w", newline="")
+    headers = ["code", "date", "last_trade_price", "max", "min", "avg", "percentage_change", "volume",
+               "best_turnover", "total_turnover"]
+    writer = csv.DictWriter(file, fieldnames=headers)
 
     while any(status is False for status in is_up_to_date):
         current_pos = is_up_to_date.index(False)
@@ -92,24 +106,28 @@ if __name__ == '__main__':
             is_up_to_date[current_pos] = True
             continue
 
-        print(f"Calling Tablescraper for ticker with code {next_outdated_ticker[0][0]}")
-        print(f"... with latest available date {next_outdated_ticker[0][1]}")
+        print(f"Calling Tablescraper for ticker with code {next_outdated_ticker[0]}")
+        print(f"... with latest available date {next_outdated_ticker[1]}")
 
         # Search from the next day!
-        res = Tablescraper.scrape_table(next_outdated_ticker[0], next_outdated_ticker[1] + timedelta(days=1))
+        ret = Tablescraper.scrape_table(next_outdated_ticker[0], next_outdated_ticker[1] + timedelta(days=1),
+                                        local_write, file, writer)
 
         print(f"Scraping batch for ticker {next_outdated_ticker[0]} successful")
 
-        # after scraping one batch (364 days worth)...
-        latest_available_after_scraping = db[next_outdated_ticker[0]].find().sort("date", -1)[0]
-        date_latest_for_current_ticker = latest_available_after_scraping["date"]
+        if local_write is False:
+            # after scraping one batch (364 days worth)...
+            latest_available_after_scraping = db[next_outdated_ticker[0]].find().sort("date", -1)[0]
+            date_latest_for_current_ticker = latest_available_after_scraping["date"]
 
-        print(f"Updating {next_outdated_ticker[0]} latest date in ticker info collection")
+            print(f"Updating {next_outdated_ticker[0]} latest date in ticker info collection")
 
-        ticker_info_collection_doc_for_current_ticker = ticker_info_collection.update_one(
-            {"ticker": next_outdated_ticker[0]},
-            {"$set": {"last_date_info": date_latest_for_current_ticker}}
-        )
+            ticker_info_collection_doc_for_current_ticker = ticker_info_collection.update_one(
+                {"ticker": next_outdated_ticker[0]},
+                {"$set": {"last_date_info": date_latest_for_current_ticker}}
+            )
+        else:
+            date_latest_for_current_ticker = ret
 
         # rebuild pair with new date, to not get stuck in an infinite loop
         new_pair_values = (next_outdated_ticker[0], date_latest_for_current_ticker)
@@ -120,5 +138,6 @@ if __name__ == '__main__':
 
     END = time.time()
     total_runtime = END - START
+    file.close()
 
     print(f"Total scraper runtime: {total_runtime}")
