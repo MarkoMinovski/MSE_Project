@@ -27,8 +27,12 @@ class TickerScraper:
     def initial_scrape(self):
         server_response = requests.get(self.initial_url)
 
+        print("Server responded to initial HTTP request")
+
         if server_response.status_code == HTTP_STATUS_OK:
             beautiful_soup_parser = BeautifulSoup(server_response.content, 'html.parser')
+
+            print("Server response OK")
 
             # all tickers
             select_tag = beautiful_soup_parser.find('select', id='Code')
@@ -44,6 +48,9 @@ class TickerScraper:
         else:
             return None
 
+        print("Result of ticker scraping:")
+        print(filtered_tickers_list)
+        print("=======================")
         return filtered_tickers_list
 
     # Remove tickers with numbers and government bonds

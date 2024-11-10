@@ -3,9 +3,11 @@ import requests
 from bs4 import BeautifulSoup
 from tablerow import TableRow
 from datetime import datetime, timedelta
+from Latestdatescraper import Latestdatescraper
 
-DEFAULT_URL = "https://www.mse.mk/mk/stats/symbolhistory/MPT"
+DEFAULT_URL = "https://www.mse.mk/en/stats/symbolhistory/MPT"
 TODAY = datetime.today()
+LATEST_AVAILABLE = Latestdatescraper.get_latest_available_date()
 
 
 def is_less_than_year_ago(date):
@@ -28,14 +30,14 @@ def reformat_delimiters(table_row_object):
 
 def reformat_price_delimiter(price_string: str):
     tmp_price_str = price_string
-    tmp_price_str = tmp_price_str.replace(".", ",")
-    split = tmp_price_str.rsplit(",", 1)
-    tmp_price_str = ".".join(split)
+    tmp_price_str = tmp_price_str.replace(",", ".")
+    split = tmp_price_str.rsplit(".", 1)
+    tmp_price_str = ",".join(split)
     return tmp_price_str
 
 
 def get_day_month_year(date: str):
-    day_m_year_list = date.split(".")
+    day_m_year_list = date.split("/")
     return day_m_year_list
 
 
@@ -43,59 +45,77 @@ def get_day_month_year(date: str):
 class Tablescraper:
     @staticmethod
     def scrape_table(ticker_code: str, latest_date):
-        response = Tablescraper.send_post_request(ticker_code, latest_date)
-        soup = BeautifulSoup(response.content, "html.parser")
+        finished_batch = False
+        no_table_in_previous_cycle = False
+        search_date = latest_date
 
-        table_rows = soup.find_all('tr')
+        while not finished_batch:
 
-        table_ticker_collection = db[ticker_code]
+            if no_table_in_previous_cycle:
+                search_date += timedelta(weeks=8)
 
-        # HTML structure of stock exchange page:
-        # each <tr> has exactly 9 child <td> tags
-        for row in table_rows:
-            children = row.find_all("td", recursive=False)
+            print(f"Sending POST request for ticker {ticker_code}")
+            response = Tablescraper.send_post_request(ticker_code, search_date)
+            soup = BeautifulSoup(response.content, "html.parser")
 
-            # issue with reading first row of the table as it has no <td> tags
-            if len(children) != 9:
+            table_rows = soup.find_all('tr')
+
+            if not table_rows:
+                print(f"Lack of info for current time period. Pushing ahead by 8 weeks!")
+                no_table_in_previous_cycle = True
                 continue
 
-            table_row_obj = TableRow()
+            print("Table rows in HTML found")
+            table_ticker_collection = db[ticker_code]
 
-            table_row_obj.date = children[0].text
-            table_row_obj.last_trade_price = children[1].text
-            table_row_obj.max = children[2].text
-            table_row_obj.min = children[3].text
-            table_row_obj.avg = children[4].text
-            table_row_obj.percentage_change_as_decimal = children[5].text
-            table_row_obj.volume = children[6].text
-            table_row_obj.BEST_turnover_in_denars = children[7].text
-            table_row_obj.total_turnover_in_denars = children[8].text
+            # HTML structure of stock exchange page:
+            # each <tr> has exactly 9 child <td> tags
+            for row in table_rows:
+                children = row.find_all("td", recursive=False)
 
-            table_row_obj = reformat_delimiters(table_row_obj)
+                # issue with reading first row of the table as it has no <td> tags
+                if len(children) != 9:
+                    continue
 
-            d_m_y = get_day_month_year(table_row_obj.date)
-            datetime_d_m_y = datetime(int(d_m_y[2]), int(d_m_y[1]), int(d_m_y[0]))
+                table_row_obj = TableRow()
 
-            row_doc = {
-                "date": datetime_d_m_y,
-                "last_trade_price": table_row_obj.last_trade_price,
-                "max": table_row_obj.max,
-                "min": table_row_obj.min,
-                "avg": table_row_obj.avg,
-                "percentage_change_decimal": table_row_obj.percentage_change_as_decimal,
-                "vol": table_row_obj.volume,
-                "BEST_turnover": table_row_obj.BEST_turnover_in_denars,
-                "total_turnover": table_row_obj.total_turnover_in_denars
-            }
+                table_row_obj.date = children[0].text
+                table_row_obj.last_trade_price = children[1].text
+                table_row_obj.max = children[2].text
+                table_row_obj.min = children[3].text
+                table_row_obj.avg = children[4].text
+                table_row_obj.percentage_change_as_decimal = children[5].text
+                table_row_obj.volume = children[6].text
+                table_row_obj.BEST_turnover_in_denars = children[7].text
+                table_row_obj.total_turnover_in_denars = children[8].text
 
-            table_ticker_collection.insert_one(row_doc)
+                table_row_obj = reformat_delimiters(table_row_obj)
+
+                d_m_y = get_day_month_year(table_row_obj.date)
+                datetime_d_m_y = datetime(int(d_m_y[2]), int(d_m_y[0]), int(d_m_y[1]))
+
+                row_doc = {
+                    "date": datetime_d_m_y,
+                    "date_str": table_row_obj.date,
+                    "last_trade_price": table_row_obj.last_trade_price,
+                    "max": table_row_obj.max,
+                    "min": table_row_obj.min,
+                    "avg": table_row_obj.avg,
+                    "percentage_change_decimal": table_row_obj.percentage_change_as_decimal,
+                    "vol": table_row_obj.volume,
+                    "BEST_turnover": table_row_obj.BEST_turnover_in_denars,
+                    "total_turnover": table_row_obj.total_turnover_in_denars
+                }
+
+                table_ticker_collection.insert_one(row_doc)
+            print("Writing to Db complete")
+            finished_batch = True
 
     @staticmethod
     def send_post_request(ticker_code, latest_date):
         from_date = latest_date
         if is_less_than_year_ago(from_date):
-            days_between = abs(TODAY - from_date)
-            to_date = from_date + timedelta(days=days_between.days)
+            to_date = LATEST_AVAILABLE
         else:
             to_date = from_date + timedelta(days=364)
 
@@ -103,8 +123,10 @@ class Tablescraper:
             "content_type": "application/x-www-form-urlencoded"
         }
 
-        from_date_string = str(from_date.day) + "." + str(from_date.month) + "." + str(from_date.year)
-        to_date_string = str(to_date.month) + "." + str(to_date.day) + "." + str(to_date.year)
+        from_date_string = str(from_date.month) + "/" + str(from_date.day) + "/" + str(from_date.year)
+        to_date_string = str(to_date.month) + "/" + str(to_date.day) + "/" + str(to_date.year)
+
+        print(f"Building POST request with FromDate {from_date_string}, ToDate {to_date_string} and CODE {ticker_code}")
 
         payload = {
             "FromDate": from_date_string,
