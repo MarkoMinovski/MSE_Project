@@ -90,10 +90,15 @@ if __name__ == '__main__':
 
     print("Entering main LOOP")
 
-    file = open("raw_output_labeled.csv", mode="w", newline="")
-    headers = ["code", "date", "last_trade_price", "max", "min", "avg", "percentage_change", "volume",
-               "best_turnover", "total_turnover"]
-    writer = csv.DictWriter(file, fieldnames=headers)
+    if local_write is True:
+        file_str = "raw_output_" + str(datetime.today().date())
+        file = open(file_str, mode="w", newline="")
+        headers = ["code", "date", "last_trade_price", "max", "min", "avg", "percentage_change", "volume",
+                   "best_turnover", "total_turnover"]
+        writer = csv.DictWriter(file, fieldnames=headers)
+    else:
+        file = None
+        writer = None
 
     while any(status is False for status in is_up_to_date):
         current_pos = is_up_to_date.index(False)
@@ -138,6 +143,14 @@ if __name__ == '__main__':
 
     END = time.time()
     total_runtime = END - START
-    file.close()
 
-    print(f"Total scraper runtime: {total_runtime}")
+    if local_write:
+        file.close()
+    total_runtime_minutes = total_runtime / 60
+
+    print(f"Total scraper runtime: {total_runtime_minutes} (in minutes).")
+
+    if local_write is True:
+        print("Using local write")
+    else:
+        print("Using database write")

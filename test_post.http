@@ -1,9 +1,0 @@
-### Send POST request with body as parameters
-POST https://www.mse.mk/en/stats/symbolhistory/ADIN
-Content-Type: application/x-www-form-urlencoded
-
-FromDate=10%2F10%2F2015 &
-ToDate=10%2F9%2F2016 &
-Code=ADIN
-
-// HTTP Client will format this x-www-form-urlencoded string properly.
